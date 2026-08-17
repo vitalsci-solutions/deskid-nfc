@@ -1,0 +1,50 @@
+{
+  "name": "deskid-nfc",
+  "version": "0.1.0",
+  "description": "WebSerial driver for the Metratec DeskID NFC desk reader: tag presence events, NDEF read/write, zero dependencies.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "license": "MIT",
+  "author": "VS-Apps (https://github.com/vitalsci-solutions)",
+  "homepage": "https://vitalsci-solutions.github.io/deskid-nfc/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vitalsci-solutions/deskid-nfc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vitalsci-solutions/deskid-nfc/issues"
+  },
+  "keywords": [
+    "nfc",
+    "rfid",
+    "ndef",
+    "webserial",
+    "metratec",
+    "deskid",
+    "ntag",
+    "iso14443"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "bun test",
+    "prepublishOnly": "bun run check && bun test && bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "typescript": "~6.0.2"
+  }
+}

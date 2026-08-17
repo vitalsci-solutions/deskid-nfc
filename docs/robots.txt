@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vitalsci-solutions.github.io/deskid-nfc/sitemap.xml

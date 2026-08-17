@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>deskid-nfc: Metratec DeskID NFC reader in the browser</title>
+    <meta
+      name="description"
+      content="Zero-dependency TypeScript package for driving a Metratec DeskID NFC desk reader over WebSerial: tag presence events, NDEF read and write, and the firmware quirks handled for you."
+    />
+    <link rel="canonical" href="https://vitalsci-solutions.github.io/deskid-nfc/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="VS-Apps" />
+    <meta
+      name="keywords"
+      content="deskid nfc, metratec, webserial, nfc, ndef, ntag213, iso14443, javascript, typescript, rfid reader, browser"
+    />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="deskid-nfc" />
+    <meta property="og:url" content="https://vitalsci-solutions.github.io/deskid-nfc/" />
+    <meta property="og:title" content="deskid-nfc: Metratec DeskID NFC reader in the browser" />
+    <meta
+      property="og:description"
+      content="Tag presence events, NDEF read and write, and the four firmware quirks handled. Zero dependencies, 5.4 kB, TypeScript."
+    />
+    <meta property="og:image" content="https://vitalsci-solutions.github.io/deskid-nfc/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="deskid-nfc: a WebSerial driver for the Metratec DeskID NFC reader" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#fbfaf9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#131211" media="(prefers-color-scheme: dark)" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": "deskid-nfc",
+        "description": "Zero-dependency TypeScript package for driving a Metratec DeskID NFC desk reader over WebSerial: tag presence events, NDEF read and write, and the firmware quirks handled for you.",
+        "url": "https://vitalsci-solutions.github.io/deskid-nfc/",
+        "codeRepository": "https://github.com/vitalsci-solutions/deskid-nfc",
+        "programmingLanguage": "TypeScript",
+        "runtimePlatform": "Browser (WebSerial)",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": {
+          "@type": "Organization",
+          "name": "VS-Apps",
+          "url": "https://github.com/vitalsci-solutions"
+        },
+        "about": {
+          "@type": "Product",
+          "name": "Metratec DeskID NFC",
+          "category": "NFC desk reader"
+        }
+      }
+    </script>
+
+    <style>
+      /* Type is a deliberate system stack: this page ships as one request with no
+         webfont, which keeps LCP low on a page whose whole point is being small. */
+      :root {
+        --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+        --bg: #fbfaf9;
+        --surface: #ffffff;
+        --surface-2: #f4f2f0;
+        --text: #1c1917;
+        --muted: #57534e;
+        /* --faint still has to clear WCAG AA on --surface-2, where code comments sit. */
+        --faint: #6b645f;
+        --line: #e5e2df;
+        --accent: #b8420f;
+        --accent-ink: #ffffff;
+        --accent-soft: rgba(184, 66, 15, 0.07);
+
+        --radius: 10px;
+        --container: 1120px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131211;
+          --surface: #1a1917;
+          --surface-2: #1f1d1b;
+          --text: #ece8e4;
+          --muted: #a8a29e;
+          --faint: #948d87;
+          --line: #2e2b28;
+          --accent: #fb923c;
+          --accent-ink: #1a1005;
+          --accent-soft: rgba(251, 146, 60, 0.09);
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 16px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .wrap {
+        max-width: var(--container);
+        margin: 0 auto;
+        padding: 0 1.5rem;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+
+      a:hover {
+        text-decoration-color: var(--faint);
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      code,
+      pre,
+      .mono {
+        font-family: var(--font-mono);
+        font-variant-ligatures: none;
+      }
+
+      .skip {
+        position: absolute;
+        left: -9999px;
+      }
+
+      .skip:focus {
+        left: 1rem;
+        top: 1rem;
+        z-index: 10;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 0.5rem 0.75rem;
+      }
+
+      /* --- header ------------------------------------------------------- */
+
+      header {
+        height: 68px;
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+
+      header .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        width: 100%;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        font-family: var(--font-mono);
+        font-variant-ligatures: none;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+        text-decoration: none;
+        letter-spacing: -0.01em;
+      }
+
+      .brand svg {
+        width: 22px;
+        height: 22px;
+        flex: none;
+      }
+
+      nav {
+        display: flex;
+        align-items: center;
+        gap: 1.4rem;
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+
+      nav a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      nav a:hover {
+        color: var(--text);
+      }
+
+      /* --- hero -------------------------------------------------------- */
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.02fr 0.98fr;
+        gap: 3.5rem;
+        align-items: center;
+        padding: 5rem 0 4.5rem;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(2.1rem, 4.6vw, 3.25rem);
+        line-height: 1.06;
+        letter-spacing: -0.032em;
+        font-weight: 640;
+        text-wrap: balance;
+      }
+
+      .lede {
+        margin: 1.25rem 0 0;
+        font-size: 1.075rem;
+        color: var(--muted);
+        max-width: 34ch;
+      }
+
+      .cta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 2rem;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.62rem 1.15rem;
+        border-radius: var(--radius);
+        border: 1px solid transparent;
+        font-size: 0.94rem;
+        font-weight: 550;
+        text-decoration: none;
+        white-space: nowrap;
+        transition:
+          transform 0.12s ease,
+          background-color 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+
+      .btn-primary:hover {
+        background: color-mix(in oklab, var(--accent) 88%, var(--text));
+      }
+
+      .btn-secondary {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--text);
+      }
+
+      .btn-secondary:hover {
+        border-color: var(--faint);
+      }
+
+      .btn:active {
+        transform: translateY(1px);
+      }
+
+      /* --- code surfaces ------------------------------------------------ */
+
+      .code {
+        background: var(--surface-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .code pre {
+        margin: 0;
+        padding: 1.15rem 1.25rem;
+        overflow-x: auto;
+        font-size: 0.845rem;
+        line-height: 1.72;
+        tab-size: 2;
+      }
+
+      .code .c {
+        color: var(--faint);
+      }
+
+      .install {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        border-bottom: 1px solid var(--line);
+        padding: 0.7rem 0.7rem 0.7rem 1.25rem;
+        font-size: 0.87rem;
+      }
+
+      .install code {
+        color: var(--text);
+      }
+
+      .install code::before {
+        content: "$ ";
+        color: var(--faint);
+      }
+
+      .copy {
+        flex: none;
+        font: inherit;
+        font-size: 0.78rem;
+        font-family: var(--font-sans);
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 0.3rem 0.6rem;
+        cursor: pointer;
+        transition:
+          color 0.15s ease,
+          border-color 0.15s ease;
+      }
+
+      .copy:hover {
+        color: var(--text);
+        border-color: var(--faint);
+      }
+
+      .copy[data-copied="true"] {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      /* --- sections ----------------------------------------------------- */
+
+      section {
+        padding: 4rem 0;
+        border-top: 1px solid var(--line);
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(1.5rem, 2.6vw, 1.95rem);
+        line-height: 1.18;
+        letter-spacing: -0.022em;
+        font-weight: 620;
+      }
+
+      .section-body {
+        margin: 0.85rem 0 0;
+        color: var(--muted);
+        max-width: 62ch;
+      }
+
+      /* --- quirk grid --------------------------------------------------- */
+
+      .quirks {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-top: 2.5rem;
+      }
+
+      .quirk {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 1.4rem;
+        background: var(--surface);
+      }
+
+      .quirk:nth-child(2n) {
+        background: var(--accent-soft);
+        border-color: color-mix(in oklab, var(--accent) 22%, var(--line));
+      }
+
+      .quirk .symptom {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 0.82rem;
+        color: var(--accent);
+        word-break: break-word;
+      }
+
+      .quirk h3 {
+        margin: 0.85rem 0 0.4rem;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .quirk p {
+        margin: 0;
+        font-size: 0.93rem;
+        color: var(--muted);
+      }
+
+      /* --- api walkthrough ---------------------------------------------- */
+
+      .api {
+        margin-top: 2.5rem;
+      }
+
+      .api-note {
+        margin: 1rem 0 0;
+        font-size: 0.9rem;
+        color: var(--faint);
+        max-width: 68ch;
+      }
+
+      /* --- facts -------------------------------------------------------- */
+
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.5rem 1rem;
+      }
+
+      .fact .n {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 1.7rem;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+      }
+
+      .fact .l {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      /* --- verified list ------------------------------------------------ */
+
+      .verified {
+        margin: 2.5rem 0 0;
+        display: grid;
+        gap: 0;
+      }
+
+      .verified > div {
+        display: grid;
+        grid-template-columns: 12rem 1fr;
+        gap: 1.5rem;
+        padding: 0.95rem 0;
+      }
+
+      .verified > div + div {
+        border-top: 1px solid var(--line);
+      }
+
+      .verified dt {
+        font-size: 0.88rem;
+        color: var(--faint);
+        font-family: var(--font-mono);
+      }
+
+      .verified dd {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+
+      /* --- footer ------------------------------------------------------- */
+
+      footer {
+        border-top: 1px solid var(--line);
+        padding: 2.5rem 0 3.5rem;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+
+      footer .wrap {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1.5rem;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      footer nav {
+        gap: 1.25rem;
+        font-size: 0.88rem;
+      }
+
+      /* --- responsive --------------------------------------------------- */
+
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+          gap: 2.25rem;
+          padding: 3.5rem 0 3rem;
+        }
+
+        .lede {
+          max-width: 46ch;
+        }
+
+        .quirks,
+        .facts {
+          grid-template-columns: 1fr;
+        }
+
+        .facts {
+          gap: 1.75rem;
+        }
+
+        .verified > div {
+          grid-template-columns: 1fr;
+          gap: 0.25rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <a class="skip" href="#quickstart">Skip to quickstart</a>
+
+    <header>
+      <div class="wrap">
+        <a class="brand" href="/deskid-nfc/">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+            <rect x="1.5" y="1.5" width="21" height="21" rx="6" stroke="var(--line)" />
+            <path d="M8.6 8.2a5.2 5.2 0 0 1 0 7.6" stroke="var(--accent)" />
+            <path d="M12.2 5.8a8.6 8.6 0 0 1 0 12.4" stroke="var(--accent)" opacity=".55" />
+            <circle cx="6" cy="12" r="1.1" fill="var(--accent)" stroke="none" />
+          </svg>
+          deskid-nfc
+        </a>
+        <nav>
+          <a href="#quickstart">Quickstart</a>
+          <a href="https://github.com/vitalsci-solutions/deskid-nfc">GitHub</a>
+          <a href="https://www.npmjs.com/package/deskid-nfc">npm</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <div class="hero">
+          <div>
+            <h1>Metratec DeskID NFC, in the browser</h1>
+            <p class="lede">
+              Tag presence events and NDEF read and write over WebSerial, with the reader's four firmware quirks
+              already handled.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="#quickstart">Get started</a>
+              <a class="btn btn-secondary" href="https://github.com/vitalsci-solutions/deskid-nfc">GitHub</a>
+            </div>
+          </div>
+
+          <div class="code">
+            <div class="install">
+              <code id="install-cmd">npm i deskid-nfc</code>
+              <button class="copy" type="button" data-target="install-cmd">Copy</button>
+            </div>
+            <pre><code>import { DeskIdNfc } from 'deskid-nfc';
+
+const nfc = new DeskIdNfc();
+
+nfc.on('tag', async (tag) =&gt; {
+  const { records } = await nfc.read(tag.uid);
+  console.log(tag.uid, records);
+});
+
+<span class="c">// WebSerial needs a user gesture</span>
+button.onclick = () =&gt; nfc.open();</code></pre>
+          </div>
+        </div>
+      </div>
+
+      <section>
+        <div class="wrap">
+          <h2>Four firmware behaviours, already handled</h2>
+          <p class="section-body">
+            The reader speaks an AT-style line protocol over USB CDC, and it works right up until it doesn't. These
+            four behaviours cause almost every confusing failure. Each one is handled inside the package, on firmware
+            2.08.
+          </p>
+
+          <div class="quirks">
+            <article class="quirk">
+              <span class="symptom">+INV: &lt;NO TAGS FOUND&gt;</span>
+              <h3>The RF field idles off</h3>
+              <p>
+                A cold inventory round misses a tag that is sitting on the antenna. The field is switched on at
+                connect and stays energized for the whole session.
+              </p>
+            </article>
+
+            <article class="quirk">
+              <span class="symptom">+SEL: &lt;Tag timeout&gt;</span>
+              <h3>Tags park in HALT state</h3>
+              <p>
+                After a completed read the tag is halted, and this firmware cannot address a halted tag, so every
+                second read fails. The field is power-cycled and the select retried.
+              </p>
+            </article>
+
+            <article class="quirk">
+              <span class="symptom">+CINV: events you never started</span>
+              <h3>Scans outlive the port</h3>
+              <p>
+                Continuous inventory keeps running inside the reader after the port closes, and its rounds collide
+                with reads. Stale scans are cleared at connect, and stopped at close.
+              </p>
+            </article>
+
+            <article class="quirk">
+              <span class="symptom">~50 lines per second</span>
+              <h3>Idle rounds flood the link</h3>
+              <p>
+                Empty inventory rounds drown a log pipeline and starve the UI. Round markers are filtered in the
+                transport, so only real tag sightings reach your code.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="quickstart">
+        <div class="wrap">
+          <h2>The whole API in one screen</h2>
+          <p class="section-body">
+            Continuous inventory runs while the port is open, so tag presence is an event, not a poll. Read and write
+            pause that loop and resume it for you, and queue behind each other.
+          </p>
+
+          <div class="code api">
+            <pre><code>import { DeskIdNfc, isTagRemovedError, ndefRecordToString } from 'deskid-nfc';
+
+const nfc = new DeskIdNfc();
+
+nfc.on('tag', (tag) =&gt; show(tag.uid));            <span class="c">// a tag landed on the reader</span>
+nfc.on('tagleft', () =&gt; show(null));              <span class="c">// it was taken away</span>
+nfc.on('log', (entry) =&gt; trace(entry.text));      <span class="c">// every TX and RX line</span>
+nfc.on('close', (reason) =&gt; show(null));          <span class="c">// 'requested' or 'lost'</span>
+
+const info = await nfc.open();                    <span class="c">// picker, probe, init, watch</span>
+info.firmware;                                    <span class="c">// 'DeskID_NFC 0208'</span>
+
+const { state, records } = await nfc.read();      <span class="c">// 'RW', decoded NDEF records</span>
+records.map(ndefRecordToString);                  <span class="c">// ['moin']</span>
+
+try {
+  await nfc.write({ kind: 'uri', uri: 'https://example.com' });
+} catch (error) {
+  <span class="c">// the one failure worth its own UX: the tag was moved away</span>
+  if (!isTagRemovedError(error)) throw error;
+}
+
+await nfc.close();                                <span class="c">// stop scanning, field off, port released</span></code></pre>
+          </div>
+          <p class="api-note">
+            Also available: single shot <code>inventory()</code>, <code>checkNdef()</code>, <code>format()</code>,
+            <code>beep()</code>, a raw <code>command()</code> escape hatch, and the NDEF codec on its own for
+            encoding without hardware.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <div class="facts">
+            <div class="fact">
+              <span class="n">0</span>
+              <span class="l">runtime dependencies</span>
+            </div>
+            <div class="fact">
+              <span class="n">5.4 kB</span>
+              <span class="l">minified and gzipped</span>
+            </div>
+            <div class="fact">
+              <span class="n">85</span>
+              <span class="l">tests, no hardware needed</span>
+            </div>
+            <div class="fact">
+              <span class="n">TS</span>
+              <span class="l">ESM, types included</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="wrap">
+          <h2>What it was tested against</h2>
+
+          <!-- TODO: photo of the DeskID NFC with an NTAG213 on the antenna, 1200x900,
+               placed here as a figure. Needs a real photo of the hardware. -->
+
+          <dl class="verified">
+            <div>
+              <dt>Reader</dt>
+              <dd>Metratec DeskID NFC, firmware 2.08, hardware 0103, over USB CDC-ACM with no driver</dd>
+            </div>
+            <div>
+              <dt>Tags</dt>
+              <dd>NTAG213 (ISO14443A, NFC Forum Type 2), read, write, format and NDEF state checks</dd>
+            </div>
+            <div>
+              <dt>Browsers</dt>
+              <dd>
+                Chromium 89 and newer (Chrome, Edge, Arc, Brave) on HTTPS or localhost. Firefox and Safari do not
+                implement WebSerial
+              </dd>
+            </div>
+            <div>
+              <dt>Not tested</dt>
+              <dd>ISO15693 vicinity tags, and several tags on the antenna at once</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>MIT licensed. Maintained by <a href="https://github.com/vitalsci-solutions">VS-Apps</a>.</span>
+        <nav>
+          <a href="https://github.com/vitalsci-solutions/deskid-nfc">Source</a>
+          <a href="https://www.npmjs.com/package/deskid-nfc">npm</a>
+          <a href="https://github.com/vitalsci-solutions/deskid-nfc/issues">Issues</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      // The page's only script: copy the install command, with a confirmed state.
+      document.querySelectorAll('.copy').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const source = document.getElementById(button.dataset.target);
+          try {
+            await navigator.clipboard.writeText(source.textContent.trim());
+            button.textContent = 'Copied';
+            button.dataset.copied = 'true';
+          } catch {
+            button.textContent = 'Press Cmd C';
+          }
+          setTimeout(() => {
+            button.textContent = 'Copy';
+            delete button.dataset.copied;
+          }, 1800);
+        });
+      });
+    </script>
+  </body>
+</html>

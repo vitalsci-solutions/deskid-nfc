@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>deskid-nfc example</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 1.5rem;
+        margin-bottom: 0.25rem;
+      }
+      .sub {
+        color: color-mix(in oklab, currentColor 55%, transparent);
+        margin-top: 0;
+      }
+      section {
+        border: 1px solid color-mix(in oklab, currentColor 18%, transparent);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-top: 1rem;
+      }
+      h2 {
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin: 0 0 0.75rem;
+        color: color-mix(in oklab, currentColor 60%, transparent);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        padding: 0.4rem 0.7rem;
+        border-radius: 0.375rem;
+        border: 1px solid color-mix(in oklab, currentColor 25%, transparent);
+        background: transparent;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      pre {
+        margin: 0;
+        overflow: auto;
+        max-height: 16rem;
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+      }
+      .tx {
+        color: #2563eb;
+      }
+      .rx {
+        color: #16a34a;
+      }
+      .error {
+        color: #dc2626;
+      }
+      .info {
+        opacity: 0.6;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>deskid-nfc</h1>
+    <p class="sub">Minimal WebSerial demo. Run <code>bun run build</code> first, then serve this folder.</p>
+
+    <section>
+      <h2>Reader</h2>
+      <div class="row">
+        <button id="connect">Connect</button>
+        <button id="disconnect" disabled>Disconnect</button>
+        <span id="status">not connected</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Tag</h2>
+      <div id="tag">Place a tag on the reader.</div>
+      <pre id="content"></pre>
+    </section>
+
+    <section>
+      <h2>Write</h2>
+      <div class="row">
+        <select id="kind">
+          <option value="text">Text</option>
+          <option value="uri">URI</option>
+        </select>
+        <input id="value" placeholder="moin" style="flex: 1 1 12rem" />
+        <button id="write" disabled>Write to tag on reader</button>
+      </div>
+      <p id="writeStatus" class="sub"></p>
+    </section>
+
+    <section>
+      <h2>Protocol log</h2>
+      <pre id="log"></pre>
+    </section>
+
+    <script type="module">
+      import { DeskIdNfc, formatUid, isTagRemovedError, ndefRecordToString, reverseUid } from '../dist/index.js';
+
+      const $ = (id) => document.getElementById(id);
+      const nfc = new DeskIdNfc();
+
+      if (!DeskIdNfc.isSupported()) {
+        $('status').textContent = 'WebSerial unavailable — use Chrome/Edge over https or localhost';
+        $('connect').disabled = true;
+      }
+
+      nfc.on('log', (entry) => {
+        const line = document.createElement('div');
+        line.className = entry.direction;
+        line.textContent = `${entry.direction.padEnd(5)} ${entry.text}`;
+        $('log').append(line);
+        $('log').scrollTop = $('log').scrollHeight;
+      });
+
+      nfc.on('tag', async (tag) => {
+        $('tag').textContent = `${tag.uid}  (as a phone shows it: ${formatUid(reverseUid(tag.uid))})`;
+        $('content').textContent = 'reading…';
+        try {
+          const { state, records } = await nfc.read(tag.uid);
+          $('content').textContent = `${state}\n${records.map(ndefRecordToString).join('\n')}`;
+        } catch (error) {
+          $('content').textContent = isTagRemovedError(error)
+            ? 'Removed too early — keep the tag on the reader.'
+            : `Read failed: ${error.message}`;
+        }
+      });
+
+      nfc.on('tagleft', () => {
+        $('tag').textContent = 'Place a tag on the reader.';
+        $('content').textContent = '';
+      });
+
+      nfc.on('error', (error) => console.error(error));
+
+      nfc.on('close', (reason) => {
+        $('status').textContent = reason === 'lost' ? 'device lost' : 'not connected';
+        $('connect').disabled = false;
+        $('disconnect').disabled = true;
+        $('write').disabled = true;
+      });
+
+      $('connect').addEventListener('click', async () => {
+        $('connect').disabled = true;
+        try {
+          const info = await nfc.open();
+          $('status').textContent = `${info.firmware} · serial ${info.serial}`;
+          $('disconnect').disabled = false;
+          $('write').disabled = false;
+        } catch (error) {
+          $('status').textContent = `connect failed: ${error.message}`;
+          $('connect').disabled = false;
+        }
+      });
+
+      $('disconnect').addEventListener('click', () => nfc.close());
+
+      $('write').addEventListener('click', async () => {
+        const value = $('value').value.trim();
+        if (!value) return;
+        const record = $('kind').value === 'uri' ? { kind: 'uri', uri: value } : { kind: 'text', lang: 'en', text: value };
+        $('write').disabled = true;
+        $('writeStatus').textContent = 'writing…';
+        try {
+          const verified = await nfc.write(record);
+          $('writeStatus').textContent = `written and verified: ${verified.records.map(ndefRecordToString).join(', ')}`;
+        } catch (error) {
+          $('writeStatus').textContent = isTagRemovedError(error)
+            ? 'Removed too early — put the tag back and try again.'
+            : `Write failed: ${error.message}`;
+        } finally {
+          $('write').disabled = !nfc.isOpen;
+        }
+      });
+
+      addEventListener('beforeunload', () => void nfc.close());
+    </script>
+  </body>
+</html>
