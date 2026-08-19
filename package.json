@@ -39,6 +39,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "bun test",
     "prepublishOnly": "bun run check && bun test && bun run build"
